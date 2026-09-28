@@ -1,5 +1,5 @@
 pipeline {
-    // Must be a Windows agent that runs ON the IIS server (needs appcmd + msdeploy)
+    // Must be a Windows agent (needs PowerShell + msdeploy)
     agent { label 'windows-iis' }
 
     options {
@@ -12,15 +12,17 @@ pipeline {
         string(name: 'BINARIES_PATH', defaultValue: 'D:\\MedicaPlus\\TobeTransfered',
                description: 'Folder containing one sub-folder per app to deploy')
         string(name: 'SITE_NAME', defaultValue: 'Default Web Site',
-               description: 'IIS site name')
+               description: 'IIS site name (ignored when SKIP_IIS is ticked)')
         string(name: 'PHYSICAL_PATH', defaultValue: 'D:\\MedicaPlus',
                description: 'Root folder on disk where the apps live')
         string(name: 'APPCMD', defaultValue: 'C:\\Windows\\System32\\inetsrv\\appcmd.exe',
-               description: 'Full path to appcmd.exe')
+               description: 'Full path to appcmd.exe (ignored when SKIP_IIS is ticked)')
         string(name: 'MSDEPLOY_PATH', defaultValue: 'C:\\Program Files\\IIS\\Microsoft Web Deploy V3\\msdeploy.exe',
                description: 'Full path to msdeploy.exe')
         booleanParam(name: 'MAIN_CLEAN', defaultValue: false,
                description: 'Tick to DELETE destination files that are not in the source')
+        booleanParam(name: 'SKIP_IIS', defaultValue: true,
+               description: 'Tick to only transfer files (no appcmd / IIS app registration). Untick once IIS is installed')
     }
 
     stages {
@@ -39,7 +41,8 @@ pipeline {
                         -PhysicalPath $env:PHYSICAL_PATH `
                         -AppCmd       $env:APPCMD `
                         -MsDeployPath $env:MSDEPLOY_PATH `
-                        -MainClean:([System.Convert]::ToBoolean($env:MAIN_CLEAN))
+                        -MainClean:([System.Convert]::ToBoolean($env:MAIN_CLEAN)) `
+                        -SkipIIS:([System.Convert]::ToBoolean($env:SKIP_IIS))
                     exit $LASTEXITCODE
                 '''
             }

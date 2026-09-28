@@ -9,11 +9,11 @@ pipeline {
     }
 
     parameters {
-        string(name: 'BINARIES_PATH', defaultValue: 'E:\\MedicaPlus\\TobeTransfered',
+        string(name: 'BINARIES_PATH', defaultValue: 'D:\\MedicaPlus\\TobeTransfered',
                description: 'Folder containing one sub-folder per app to deploy')
         string(name: 'SITE_NAME', defaultValue: 'Default Web Site',
                description: 'IIS site name')
-        string(name: 'PHYSICAL_PATH', defaultValue: 'E:\\MedicaPlus',
+        string(name: 'PHYSICAL_PATH', defaultValue: 'D:\\MedicaPlus',
                description: 'Root folder on disk where the apps live')
         string(name: 'APPCMD', defaultValue: 'C:\\Windows\\System32\\inetsrv\\appcmd.exe',
                description: 'Full path to appcmd.exe')

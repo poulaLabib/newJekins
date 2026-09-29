@@ -16,17 +16,12 @@ pipeline {
                description: 'Root folder on disk where the apps live')
         string(name: 'APPCMD', defaultValue: 'C:\\Windows\\System32\\inetsrv\\appcmd.exe',
                description: 'Full path to appcmd.exe')
-        string(name: 'MSDEPLOY_PATH', defaultValue: 'C:\\Program Files\\IIS\\Microsoft Web Deploy V3\\msdeploy.exe',
-               description: 'Full path to msdeploy.exe')
         booleanParam(name: 'MAIN_CLEAN', defaultValue: false,
                description: 'Tick to DELETE destination files that are not in the source')
     }
 
     stages {
-        stage('Checkout') {
-            steps { checkout scm }
-        }
-
+        // Declarative pipelines already check out the repo, so no separate checkout stage is needed.
         stage('Deploy') {
             steps {
                 powershell '''
@@ -35,7 +30,6 @@ pipeline {
                         -siteName     $env:SITE_NAME `
                         -physicalPath $env:PHYSICAL_PATH `
                         -appcmd       $env:APPCMD `
-                        -MsDeployPath $env:MSDEPLOY_PATH `
                         -MainClean    ([System.Convert]::ToBoolean($env:MAIN_CLEAN))
                     exit $LASTEXITCODE
                 '''

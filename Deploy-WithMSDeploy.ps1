@@ -1,84 +1,95 @@
-﻿param(
+﻿[CmdletBinding()]
+param(
     [string]$binariesPath = "C:\MedicaPlus\TobeTransfered",
     [string]$siteName     = "Default Web Site",
     [string]$physicalPath = "C:\MedicaPlus",
     [string]$appcmd       = "$env:windir\system32\inetsrv\appcmd.exe",
-    [string]$MsDeployPath = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe",
-    [bool]$MainClean      = $false
+    [bool]$MainClean      = $false   # $true = delete destination files that are not in the source
 )
 
-Function Deploy-WithMSDeploy {
+$ErrorActionPreference = 'Stop'
+
+Function Deploy-WithRobocopy {
     param(
-        [string]$FolderPath,
-        [string]$PhysicalPath,
-        [string]$SiteName,
-        [bool]$Clean = $true,
-        [string]$MsDeployPath = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+        [string]$SourcePath,
+        [string]$DestPath,
+        [bool]$Clean = $false
     )
 
-    if (!(Test-Path $MsDeployPath)) {
-        Write-Error "msdeploy.exe not found at: $MsDeployPath"
-        return $false
+    if (!(Test-Path $DestPath)) {
+        Write-Host "  [DIR] Creating missing destination folder: $DestPath"
+        New-Item $DestPath -ItemType Directory -Force | Out-Null
     }
 
-    $appName    = Split-Path $PhysicalPath -Leaf
-    $iisAppPath = "$SiteName/$appName"
+    # /MIR = mirror (deletes extra files at destination), /E = copy subfolders, delete nothing
+    $mode = if ($Clean) { '/MIR' } else { '/E' }
 
-    # Ensure destination directory exists before MSDeploy runs (AppOffline rule needs it)
-    if (!(Test-Path $PhysicalPath)) {
-        Write-Host "  [DIR] Creating missing destination folder: $PhysicalPath"
-        New-Item $PhysicalPath -ItemType Directory -Force | Out-Null
-    }
+    Write-Host "Copying '$SourcePath' -> '$DestPath' | Clean: $Clean"
+    robocopy $SourcePath $DestPath $mode /R:2 /W:2 /NP | Out-Host
 
-    $msdeployArgs = @(
-        "-verb:sync",
-        "-source:iisApp=`"$FolderPath`"",
-        "-dest:iisApp=`"$iisAppPath`"",
-        "-enableRule:AppOffline",
-        "-useCheckSum"
-    )
-
-    if (-not $Clean) {
-        $msdeployArgs += "-enableRule:DoNotDeleteRule"
-    }
-
-    Write-Host "Deploying '$FolderPath' -> '$iisAppPath' on $env:COMPUTERNAME | Clean: $Clean"
-    & $MsDeployPath @msdeployArgs
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "MSDeploy failed (exit code: $LASTEXITCODE)"
-        return $false
+    # robocopy exit codes: 0-7 = success, 8+ = failure
+    if ($LASTEXITCODE -ge 8) {
+        throw "robocopy failed (exit code: $LASTEXITCODE)"
     }
 
     Write-Host "Deployment successful."
-    return $true
 }
 
-Write-Output "Scanning for missing IIS apps in: $binariesPath"
+try {
+    # ---- Validate inputs first, before creating anything ----
+    if (!(Test-Path $binariesPath)) { throw "binariesPath not found: $binariesPath" }
+    if (!(Test-Path $appcmd))       { throw "appcmd.exe not found at: $appcmd" }
 
-foreach ($app in (Get-ChildItem $binariesPath).Name) {
-    $fullPath = Join-Path $physicalPath $app
-    $exists   = & $appcmd list app "/site.name:$siteName" "/path:/$app" 2>$null
+    Write-Output "Scanning for IIS apps in: $binariesPath"
+    Write-Output "Site: $siteName | Target: $physicalPath | Clean: $MainClean"
 
-    if (!$exists) {
-        Write-Output "  [NEW] Adding app: $app"
+    $failedApps = @()
+    $apps = @(Get-ChildItem $binariesPath -Directory).Name
 
-        if (!(Test-Path $fullPath)) {
-            Write-Output "  [DIR] Creating folder: $fullPath"
-            New-Item $fullPath -ItemType Directory -Force | Out-Null
-        }
-
-        & $appcmd add app "/site.name:$siteName" "/path:/$app" "/physicalPath:$fullPath"
-    } else {
-        Write-Output "  [OK]  Already exists: $app"
+    if ($apps.Count -eq 0) {
+        Write-Output "No app folders found in $binariesPath - nothing to deploy."
     }
 
-    Deploy-WithMSDeploy `
-        -FolderPath  (Join-Path $binariesPath $app) `
-        -PhysicalPath $fullPath `
-        -SiteName    $siteName `
-        -Clean       $MainClean `
-        -MsDeployPath $MsDeployPath
+    foreach ($app in $apps) {
+        try {
+            $fullPath = Join-Path $physicalPath $app
+            $exists   = & $appcmd list app "/site.name:$siteName" "/path:/$app" 2>$null
+
+            if (!$exists) {
+                Write-Output "  [NEW] Adding app: $app"
+
+                if (!(Test-Path $fullPath)) {
+                    Write-Output "  [DIR] Creating folder: $fullPath"
+                    New-Item $fullPath -ItemType Directory -Force | Out-Null
+                }
+
+                & $appcmd add app "/site.name:$siteName" "/path:/$app" "/physicalPath:$fullPath"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "appcmd failed to add app '$app' (exit code: $LASTEXITCODE)"
+                }
+            } else {
+                Write-Output "  [OK]  Already exists: $app"
+            }
+
+            Deploy-WithRobocopy `
+                -SourcePath (Join-Path $binariesPath $app) `
+                -DestPath   $fullPath `
+                -Clean      $MainClean
+        }
+        catch {
+            Write-Output "  [FAIL] $app : $($_.Exception.Message)"
+            $failedApps += $app
+        }
+    }
+
+    if ($failedApps.Count -gt 0) {
+        throw "FAILED apps: $($failedApps -join ', ')"
+    }
+}
+catch {
+    Write-Output "ERROR: $($_.Exception.Message)"
+    exit 1   # makes the Jenkins build go red
 }
 
 Write-Output "All done."
+exit 0

@@ -1,7 +1,7 @@
 ﻿param(
-    [string]$binariesPath = "D:\MedicaPlus\TobeTransfered",
+    [string]$binariesPath = "C:\MedicaPlus\TobeTransfered",
     [string]$siteName     = "Default Web Site",
-    [string]$physicalPath = "D:\MedicaPlus",
+    [string]$physicalPath = "C:\MedicaPlus",
     [string]$appcmd       = "$env:windir\system32\inetsrv\appcmd.exe",
     [string]$MsDeployPath = "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe",
     [bool]$MainClean      = $false

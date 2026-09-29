@@ -7,6 +7,17 @@ pipeline {
         timeout(time: 30, unit: 'MINUTES')
     }
 
+    // Fallback defaults: on the first build after a parameter is added to the Jenkinsfile,
+    // params.X is null. These make sure the env vars always have a value.
+    environment {
+        BINARIES_PATH = "${params.BINARIES_PATH ?: 'C:\\MedicaPlus\\TobeTransfered'}"
+        SITE_NAME     = "${params.SITE_NAME ?: 'Default Web Site'}"
+        PHYSICAL_PATH = "${params.PHYSICAL_PATH ?: 'C:\\MedicaPlus'}"
+        APPCMD        = "${params.APPCMD ?: 'C:\\Windows\\System32\\inetsrv\\appcmd.exe'}"
+        MSDEPLOY_PATH = "${params.MSDEPLOY_PATH ?: 'C:\\Program Files\\IIS\\Microsoft Web Deploy V3\\msdeploy.exe'}"
+        MAIN_CLEAN    = "${params.MAIN_CLEAN ?: false}"
+    }
+
     parameters {
         string(name: 'BINARIES_PATH', defaultValue: 'C:\\MedicaPlus\\TobeTransfered',
                description: 'Folder containing one sub-folder per app to deploy')
@@ -30,9 +41,16 @@ pipeline {
         stage('Validate') {
             steps {
                 powershell '''
+                    $checks = [ordered]@{
+                        BINARIES_PATH = $env:BINARIES_PATH
+                        APPCMD        = $env:APPCMD
+                        MSDEPLOY_PATH = $env:MSDEPLOY_PATH
+                    }
                     $missing = @()
-                    foreach ($p in @($env:BINARIES_PATH, $env:APPCMD, $env:MSDEPLOY_PATH)) {
-                        if (!(Test-Path $p)) { $missing += $p }
+                    foreach ($k in $checks.Keys) {
+                        $p = $checks[$k]
+                        Write-Host "$k = '$p'"
+                        if ([string]::IsNullOrWhiteSpace($p) -or !(Test-Path $p)) { $missing += "$k -> '$p'" }
                     }
                     if ($missing.Count -gt 0) {
                         Write-Host "Missing paths on this agent:"

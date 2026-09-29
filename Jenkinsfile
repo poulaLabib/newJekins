@@ -21,17 +21,25 @@ pipeline {
     }
 
     stages {
-        // Declarative pipelines already check out the repo, so no separate checkout stage is needed.
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
         stage('Deploy') {
             steps {
                 powershell '''
-                    & "$env:WORKSPACE\\Deploy-WithMSDeploy.ps1" `
-                        -binariesPath $env:BINARIES_PATH `
-                        -siteName     $env:SITE_NAME `
-                        -physicalPath $env:PHYSICAL_PATH `
-                        -appcmd       $env:APPCMD `
-                        -MainClean    ([System.Convert]::ToBoolean($env:MAIN_CLEAN))
-                    exit $LASTEXITCODE
+                    try {
+                        & "$env:WORKSPACE\\Deploy-WithMSDeploy.ps1" `
+                            -binariesPath $env:BINARIES_PATH `
+                            -siteName     $env:SITE_NAME `
+                            -physicalPath $env:PHYSICAL_PATH `
+                            -appcmd       $env:APPCMD `
+                            -MainClean    ([System.Convert]::ToBoolean($env:MAIN_CLEAN))
+                        exit $LASTEXITCODE
+                    } catch {
+                        Write-Host "Deploy script error: $_"
+                        exit 1
+                    }
                 '''
             }
         }
